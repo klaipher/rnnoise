@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
 #include "kiss_fft.h"
 #include "common.h"
 #include "denoise.h"
@@ -244,7 +245,12 @@ RNNModel *rnnoise_model_from_buffer(const void *ptr, int len) {
 RNNModel *rnnoise_model_from_filename(const char *filename) {
   RNNModel *model;
   FILE *f = fopen(filename, "rb");
+  if (f == NULL) return NULL;
   model = rnnoise_model_from_file(f);
+  if (model == NULL) {
+    fclose(f);
+    return NULL;
+  }
   model->file = f;
   return model;
 }
@@ -253,12 +259,18 @@ RNNModel *rnnoise_model_from_file(FILE *f) {
   RNNModel *model;
   model = malloc(sizeof(*model));
   model->file = NULL;
+  model->blob = NULL;
+  model->const_blob = NULL;
 
   fseek(f, 0, SEEK_END);
-  model->blob_len = ftell(f);
+  long file_len = ftell(f);
   fseek(f, 0, SEEK_SET);
+  if (file_len < 0 || file_len > INT_MAX) {
+    free(model);
+    return NULL;
+  }
+  model->blob_len = (int)file_len;
 
-  model->const_blob = NULL;
   model->blob = malloc(model->blob_len);
   if (fread(model->blob, model->blob_len, 1, f) != 1)
   {
